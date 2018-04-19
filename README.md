@@ -53,7 +53,7 @@ Here is a typical playbook:
     postgresql_ssl: on
     postgresql_ssl_cert_file: "/etc/ssl/postgresql/server.crt"
     postgresql_ssl_key_file: "/etc/ssl/postgresql/server.key"
-    postgresql_ssl_ca_file: "/erc/ssl/postgresql/root.crt"
+    postgresql_ssl_ca_file: "/etc/ssl/postgresql/root.crt"
   roles:
     - postgresql-ssl
     - ANXS.postgresql

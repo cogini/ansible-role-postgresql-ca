@@ -3,7 +3,7 @@
 
 # Passphrase for CA private key
 # Set this in a vault var
-# postgresql_ca_server_ca_pass
+# postgresql_ca_ca_pass
 
 # Fully qualified DNS name of db server
 # postgresql_ca_hostname_fqdn: db.example.com
