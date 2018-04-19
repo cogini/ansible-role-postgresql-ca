@@ -1,0 +1,44 @@
+---
+# defaults file for postgresql-ssl
+
+# Passphrase for CA private key
+# Set this in a vault var
+# postgresql_ssl_server_ca_pass
+
+# Fully qualified DNS name of db server
+# postgresql_ssl_hostname_fqdn: db.example.com
+
+# Base DN for certificates
+postgresql_ssl_subj_base: "/C=US/O=Example"
+# Name of the CA
+postgresql_ssl_ca_subj: "{{ postgresql_ssl_subj_base }}/CN=PostgreSQL CA"
+# Validity period for CA cert
+postgresql_ssl_ca_days: 365
+# Validity period for certs issued by CA
+postgresql_ssl_ca_cert_validity: 365
+# Number of bits in CA key
+postgresql_ssl_ca_key_bits: 4096
+# Number of bits in server key
+postgresql_ssl_server_key_bits: 4096
+
+# Don't include tasks in Ansible log which have passwords
+# Set it to false to debug
+postgresql_ssl_no_log: true
+# postgresql_ssl_no_log: false
+
+# Target location of certs
+postgresql_ssl_dir: /etc/ssl/postgresql
+# Owner of cert and key files
+postgresql_ssl_user: root
+# Group of cert and key files
+postgresql_ssl_group: postgres
+
+# postgresql_ssl_dir: /var/lib/pgsql/10/data
+# postgresql_ssl_user: postgres
+# postgresql_ssl_group: postgres
+
+# Set to false to disable this role
+postgresql_ssl_enabled: true
+
+# Whether to copy files to server
+postgresql_ssl_copy_files: true

@@ -1,0 +1,143 @@
+---
+# tasks file for postgresql-ssl
+
+# https://www.postgresql.org/docs/10/static/ssl-tcp.html#SSL-CERTIFICATE-CREATION
+# https://www.postgresql.org/docs/10/static/libpq-ssl.html
+
+# server.crt and server.key in data dir
+# or as specified by ssl_cert_file and ssl_key_file
+# owned by root with 0640 postgres user
+
+# The first certificate in server.crt must be the server's certificate because
+# it must match the server's private key. Intermediates after
+
+# It is not necessary to add the root certificate to server.crt. Instead,
+# clients must have the root certificate of the server's certificate chain.
+
+# set the parameter ssl_ca_file in postgresql.conf to the new file name, and
+# add the authentication option clientcert=1 to the appropriate hostssl line(s)
+# in pg_hba.conf. A certificate will then be requested from the client during SSL
+# connection startup.
+
+- block:
+  - name: Stat CA private key
+    stat: path="{{ role_path }}/files/postgresql-ca-key.pem"
+    register: postgresql_ssl_ca_key
+
+  - name: Create CA private key
+    command: >
+      openssl genrsa -aes256
+      -out {{ role_path }}/files/postgresql-ca-key.pem
+      -passout "pass:{{ postgresql_ssl_ca_pass }}" {{ postgresql_ssl_ca_key_bits }}
+    args:
+      creates: "{{ role_path }}/files/postgresql-ca-key.pem"
+    when: not postgresql_ssl_ca_key.stat.exists
+    no_log: postgresql_ssl_no_log
+
+  - name: Stat CA cert
+    stat: path="{{ role_path }}/files/postgresql-ca-cert.pem"
+    register: postgresql_ssl_ca_cert
+
+  - name: Create CA cert
+    command: >
+      openssl req -new -x509 -days {{ postgresql_ssl_ca_days }}
+      -subj "{{ postgresql_ssl_ca_subj }}"
+      -key {{ role_path }}/files/postgresql-ca-key.pem
+      -passin "pass:{{ postgresql_ssl_ca_pass }}"
+      -outform PEM -out {{ role_path }}/files/postgresql-ca-cert.pem
+    args:
+      creates: "{{ role_path }}/files/postgresql-ca-cert.pem"
+    when: not postgresql_ssl_ca_cert.stat.exists
+
+  delegate_to: localhost
+  become: false
+  no_log: postgresql_ssl_no_log
+  when: postgresql_ssl_enabled
+
+- block:
+  - name: Stat server key
+    stat: path="{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.key"
+    register: postgresql_ssl_server_key
+
+  - name: Create server private key
+    command: >
+      openssl genrsa
+      -out "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.key"
+      {{ postgresql_ssl_server_key_bits }}
+    args:
+      creates: "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.key"
+    when: not postgresql_ssl_server_key.stat.exists
+    no_log: postgresql_ssl_no_log
+
+  - name: Stat server csr
+    stat: path="{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.csr"
+    register: postgresql_ssl_server_csr
+
+  - name: Create server csr
+    command: >
+      openssl req -new -text
+      -key "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.key"
+      -subj "{{ postgresql_ssl_subj_base }}/CN={{ postgresql_ssl_hostname_fqdn }}"
+      -out "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.csr"
+    args:
+      creates: "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.csr"
+    when: not postgresql_ssl_server_csr.stat.exists
+
+  - name: Stat server cert
+    stat: path="{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.cert"
+    register: postgresql_ssl_server_cert
+
+  - name: Create server cert
+    command: >
+      openssl x509 -req
+      -CA "{{ role_path }}/files/postgresql-ca-cert.pem"
+      -CAkey "{{ role_path }}/files/postgresql-ca-key.pem"
+      -in "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.csr"
+      -out "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.cert"
+      -days {{ postgresql_ssl_ca_cert_validity }} -CAcreateserial -passin "pass:{{ postgresql_ssl_ca_pass }}"
+    args:
+      creates: "{{ role_path }}/files/postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.cert"
+    when: not postgresql_ssl_server_cert.stat.exists
+
+  delegate_to: localhost
+  become: false
+  no_log: postgresql_ssl_no_log
+  when: postgresql_ssl_enabled and postgresql_ssl_hostname_fqdn is defined
+
+- block:
+  - name: Create ssl dir
+    file:
+      path: "{{ postgresql_ssl_dir }}"
+      state: directory
+      owner: "{{ postgresql_ssl_user }}"
+      group: "{{ postgresql_ssl_group }}"
+      mode: 0750
+
+  - name: Copy CA cert to server
+    copy:
+      src: postgresql-ca-cert.pem
+      dest: "{{ postgresql_ssl_dir }}/root.crt"
+      owner: "{{ postgresql_ssl_user }}"
+      group: "{{ postgresql_ssl_group }}"
+      mode: 0640
+
+  - name: Copy server cert to server
+    copy:
+      src: "postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.cert"
+      dest: "{{ postgresql_ssl_dir }}/server.crt"
+      owner: "{{ postgresql_ssl_user }}"
+      group: "{{ postgresql_ssl_group }}"
+      mode: 0640
+
+  - name: Copy server key to server
+    copy:
+      src: "postgresql-server.{{ postgresql_ssl_hostname_fqdn }}.key"
+      dest: "{{ postgresql_ssl_dir }}/server.key"
+      owner: "{{ postgresql_ssl_user }}"
+      group: "{{ postgresql_ssl_group }}"
+      mode: 0640
+    no_log: postgresql_ssl_no_log
+
+  become: true
+  tags: "deploy"
+  when: postgresql_ssl_enabled and postgresql_ssl_copy_files
